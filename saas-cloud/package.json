@@ -1,0 +1,23 @@
+{
+    "name": "saas-cloud-hdfs",
+    "version": "1.0.0",
+    "description": "SaaS Cloud Controller with HDFS-inspired block storage and AES-256 encryption",
+    "main": "server/cloud_controller.js",
+    "scripts": {
+      "start": "node server/cloud_controller.js",
+      "dev": "nodemon server/cloud_controller.js",
+      "clean": "node scripts/clean.js"
+    },
+    "dependencies": {
+      "cors": "^2.8.5",
+      "express": "^4.18.2",
+      "multer": "^1.4.5-lts.1"
+    },
+    "devDependencies": {
+      "nodemon": "^3.0.1"
+    },
+    "keywords": ["cloud", "hdfs", "saas", "encryption", "block-storage"],
+    "author": "Lab Project",
+    "license": "MIT"
+  }
+  

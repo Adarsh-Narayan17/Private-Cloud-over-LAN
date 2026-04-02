@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SaaS Cloud — HDFS Block Storage</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:        #080c14;
+    --surface:   #0e1520;
+    --card:      #121a27;
+    --border:    #1d2d42;
+    --accent:    #00d4ff;
+    --accent2:   #7c3aed;
+    --green:     #00f5a0;
+    --red:       #ff4757;
+    --yellow:    #ffd32a;
+    --text:      #e2eaf5;
+    --muted:     #6b7fa3;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Space Grotesk', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Grid background ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Header ── */
+  header {
+    position: relative; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1.2rem 2rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(8,12,20,.85);
+    backdrop-filter: blur(10px);
+  }
+  .logo {
+    display: flex; align-items: center; gap: .75rem;
+    font-family: var(--mono); font-size: 1.1rem; font-weight: 700;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(0,212,255,.4);
+  }
+  .logo-icon {
+    width: 36px; height: 36px;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    display: grid; place-items: center;
+    font-size: 1.1rem;
+    box-shadow: 0 0 12px rgba(0,212,255,.3);
+  }
+  .node-badge {
+    font-family: var(--mono); font-size: .7rem;
+    background: rgba(0,212,255,.08);
+    border: 1px solid rgba(0,212,255,.25);
+    color: var(--accent);
+    padding: .3rem .8rem;
+    border-radius: 20px;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+
+  /* ── Layout ── */
+  main {
+    position: relative; z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  /* ── Stats row ── */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    position: relative; overflow: hidden;
+    transition: border-color .2s, transform .2s;
+  }
+  .stat-card:hover { border-color: rgba(0,212,255,.3); transform: translateY(-2px); }
+  .stat-card::after {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    opacity: 0;
+    transition: opacity .2s;
+  }
+  .stat-card:hover::after { opacity: 1; }
+  .stat-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: .5rem; }
+  .stat-value { font-family: var(--mono); font-size: 1.6rem; font-weight: 700; color: var(--text); }
+  .stat-sub { font-size: .75rem; color: var(--muted); margin-top: .3rem; }
+
+  /* ── Two-column layout ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+
+  /* ── Panel ── */
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .panel-title {
+    font-family: var(--mono); font-size: .85rem; font-weight: 600;
+    color: var(--accent); letter-spacing: .05em;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .panel-body { padding: 1.5rem; }
+
+  /* ── Upload zone ── */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all .25s;
+    position: relative;
+  }
+  .drop-zone:hover, .drop-zone.dragging {
+    border-color: var(--accent);
+    background: rgba(0,212,255,.04);
+  }
+  .drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { font-size: 2.5rem; margin-bottom: .75rem; }
+  .drop-label { font-size: .9rem; color: var(--muted); }
+  .drop-label strong { color: var(--accent); }
+  .drop-hint { font-family: var(--mono); font-size: .7rem; color: var(--muted); margin-top: .4rem; }
+
+  .upload-btn {
+    width: 100%; margin-top: 1rem;
+    padding: .85rem;
+    background: linear-gradient(135deg, rgba(0,212,255,.15), rgba(124,58,237,.15));
+    border: 1px solid rgba(0,212,255,.4);
+    border-radius: 8px;
+    color: var(--accent);
+    font-family: var(--mono); font-size: .85rem; font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+    letter-spacing: .08em;
+  }
+  .upload-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(0,212,255,.25), rgba(124,58,237,.25));
+    box-shadow: 0 0 20px rgba(0,212,255,.2);
+  }
+  .upload-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── Progress ── */
+  .progress-wrap { margin-top: 1rem; display: none; }
+  .progress-wrap.show { display: block; }
+  .progress-bar-bg {
+    height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 3px;
+    width: 0%;
+    transition: width .3s;
+    box-shadow: 0 0 8px rgba(0,212,255,.5);
+  }
+  .progress-text { font-family: var(--mono); font-size: .72rem; color: var(--muted); margin-top: .4rem; }
+
+  /* ── Block viz ── */
+  #block-viz { display: flex; flex-wrap: wrap; gap: 4px; margin-top: .75rem; min-height: 30px; }
+  .blk {
+    width: 18px; height: 18px; border-radius: 3px;
+    background: var(--border);
+    border: 1px solid transparent;
+    transition: all .15s;
+    position: relative;
+  }
+  .blk.filled { background: rgba(0,212,255,.2); border-color: rgba(0,212,255,.4); }
+  .blk.done   { background: rgba(0,245,160,.25); border-color: var(--green); }
+  .blk.error  { background: rgba(255,71,87,.2); border-color: var(--red); }
+
+  /* ── Files table ── */
+  .files-list { display: flex; flex-direction: column; gap: .5rem; }
+
+  .file-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: .9rem 1rem;
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: 1rem;
+    transition: border-color .2s, transform .15s;
+    animation: fadeSlide .3s ease;
+  }
+  @keyframes fadeSlide { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .file-row:hover { border-color: rgba(0,212,255,.2); transform: translateX(3px); }
+
+  .file-name {
+    font-family: var(--mono); font-size: .82rem; font-weight: 500;
+    color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 180px;
+  }
+  .file-meta { font-family: var(--mono); font-size: .68rem; color: var(--muted); margin-top: .2rem; }
+
+  .badge {
+    font-family: var(--mono); font-size: .65rem;
+    padding: .2rem .6rem;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .badge-block { background: rgba(0,212,255,.1); color: var(--accent); border: 1px solid rgba(0,212,255,.2); }
+  .badge-enc   { background: rgba(0,245,160,.08); color: var(--green); border: 1px solid rgba(0,245,160,.2); }
+
+  .btn-dl, .btn-del {
+    font-family: var(--mono); font-size: .72rem;
+    padding: .35rem .75rem;
+    border-radius: 6px;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .btn-dl  { background: rgba(0,212,255,.08); color: var(--accent); border-color: rgba(0,212,255,.3); }
+  .btn-del { background: rgba(255,71,87,.08); color: var(--red); border-color: rgba(255,71,87,.3); }
+  .btn-dl:hover  { background: rgba(0,212,255,.2); box-shadow: 0 0 10px rgba(0,212,255,.2); }
+  .btn-del:hover { background: rgba(255,71,87,.2); }
+
+  .empty-state {
+    text-align: center; padding: 2.5rem;
+    color: var(--muted); font-family: var(--mono); font-size: .8rem;
+  }
+
+  /* ── Log terminal ── */
+  #log-terminal {
+    background: #060a10;
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: var(--mono); font-size: .72rem;
+    color: #4a9eff;
+    height: 180px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    line-height: 1.7;
+  }
+  .log-line { display: block; }
+  .log-ts { color: var(--muted); }
+  .log-ok  { color: var(--green); }
+  .log-err { color: var(--red); }
+  .log-info { color: var(--accent); }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 2rem; right: 2rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: .85rem 1.25rem;
+    font-family: var(--mono); font-size: .8rem;
+    transform: translateY(100px);
+    transition: transform .3s;
+    z-index: 100;
+    max-width: 320px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  }
+  #toast.show { transform: translateY(0); }
+  #toast.ok   { border-color: rgba(0,245,160,.4); color: var(--green); }
+  #toast.err  { border-color: rgba(255,71,87,.4); color: var(--red); }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .two-col   { grid-template-columns: 1fr; }
+    .file-row  { grid-template-columns: 1fr auto; }
+    .badge-block, .badge-enc { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">⬡</div>
+    SaaS-Cloud / HDFS
+  </div>
+  <div class="node-badge">
+    <span class="dot"></span>
+    <span id="node-name">connecting…</span>
+  </div>
+</header>
+
+<main>
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Files Stored</div>
+      <div class="stat-value" id="s-files">—</div>
+      <div class="stat-sub">in namespace</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Blocks</div>
+      <div class="stat-value" id="s-blocks">—</div>
+      <div class="stat-sub" id="s-blocksize">64 KB each</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Storage Used</div>
+      <div class="stat-value" id="s-bytes">—</div>
+      <div class="stat-sub">original data</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Encryption</div>
+      <div class="stat-value" style="font-size:1rem;line-height:1.8">AES-256-GCM</div>
+      <div class="stat-sub">per-block, authenticated</div>
+    </div>
+  </div>
+
+  <!-- Upload + Files -->
+  <div class="two-col">
+
+    <!-- Upload panel -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">⬆ UPLOAD FILE</span>
+      </div>
+      <div class="panel-body">
+
+        <div class="drop-zone" id="drop-zone">
+          <input type="file" id="file-input" />
+          <div class="drop-icon">📂</div>
+          <div class="drop-label">Drop file here or <strong>browse</strong></div>
+          <div class="drop-hint">Max 100 MB · Splits into 64 KB encrypted blocks</div>
+        </div>
+
+        <div class="progress-wrap" id="prog-wrap">
+          <div class="progress-bar-bg"><div class="progress-bar" id="prog-bar"></div></div>
+          <div class="progress-text" id="prog-text">Preparing…</div>
+          <div id="block-viz"></div>
+        </div>
+
+        <button class="upload-btn" id="upload-btn" disabled>▲ &nbsp; UPLOAD TO CLOUD</button>
+      </div>
+    </div>
+
+    <!-- Block Info panel -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">◈ HDFS BLOCK DIAGRAM</span>
+      </div>
+      <div class="panel-body">
+        <canvas id="block-canvas" width="380" height="200" style="width:100%;border-radius:8px;"></canvas>
+        <div style="margin-top:.75rem;font-family:var(--mono);font-size:.7rem;color:var(--muted)">
+          Each block is individually AES-256-GCM encrypted before storage.
+          Blocks are reassembled and decrypted on download with SHA-256 integrity check.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- File list -->
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-title">☰ CLOUD FILE SYSTEM</span>
+      <button onclick="loadFiles()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;font-family:var(--mono);">↻ refresh</button>
+    </div>
+    <div class="panel-body">
+      <div class="files-list" id="files-list">
+        <div class="empty-state">Loading files…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-title">⬡ CLOUD CONTROLLER LOG</span>
+    </div>
+    <div class="panel-body" style="padding:.5rem">
+      <div id="log-terminal"></div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+const API = '';  // same origin
+
+// ── Logging ──────────────────────────────────────────────────────
+function log(msg, type='info') {
+  const t = new Date().toLocaleTimeString();
+  const el = document.getElementById('log-terminal');
+  el.insertAdjacentHTML('beforeend',
+    `<span class="log-line"><span class="log-ts">[${t}]</span> <span class="log-${type}">${msg}</span></span>\n`
+  );
+  el.scrollTop = el.scrollHeight;
+}
+
+function toast(msg, ok=true) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + (ok ? 'ok' : 'err');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = '', 3500);
+}
+
+// ── Format helpers ────────────────────────────────────────────────
+function fmt(bytes) {
+  if (bytes < 1024)       return bytes + ' B';
+  if (bytes < 1048576)    return (bytes/1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes/1048576).toFixed(2) + ' MB';
+  return (bytes/1073741824).toFixed(2) + ' GB';
+}
+function fmtDate(ts) {
+  return new Date(ts).toLocaleString();
+}
+
+// ── Status / Stats ────────────────────────────────────────────────
+async function loadStatus() {
+  try {
+    const r = await fetch(`${API}/api/status`);
+    const d = await r.json();
+    document.getElementById('node-name').textContent = d.node;
+    document.getElementById('s-files').textContent   = d.files;
+    document.getElementById('s-blocks').textContent  = d.totalBlocks;
+    document.getElementById('s-bytes').textContent   = fmt(d.totalBytes);
+    document.getElementById('s-blocksize').textContent = `${d.blockSize/1024} KB each`;
+    log(`NameNode online · ${d.files} files · ${d.totalBlocks} blocks · uptime ${Math.floor(d.uptime)}s`, 'ok');
+  } catch(e) {
+    log('Cannot reach cloud controller: ' + e.message, 'err');
+  }
+}
+
+// ── File list ─────────────────────────────────────────────────────
+async function loadFiles() {
+  const r = await fetch(`${API}/api/files`);
+  const files = await r.json();
+  const el = document.getElementById('files-list');
+
+  if (!files.length) {
+    el.innerHTML = '<div class="empty-state">No files uploaded yet. The namespace is empty.</div>';
+    return;
+  }
+
+  el.innerHTML = files.map(f => `
+    <div class="file-row">
+      <div>
+        <div class="file-name" title="${f.originalName}">${f.originalName}</div>
+        <div class="file-meta">${fmt(f.originalSize)} · ${fmtDate(f.uploadedAt)} · SHA256: ${f.checksum.slice(0,12)}…</div>
+      </div>
+      <span class="badge badge-block">${f.blockCount} blocks</span>
+      <span class="badge badge-enc">🔒 ${f.encryption}</span>
+      <div style="display:flex;gap:.5rem">
+        <button class="btn-dl" onclick="downloadFile('${f.fileId}','${f.originalName}')">⬇ DL</button>
+        <button class="btn-del" onclick="deleteFile('${f.fileId}','${f.originalName}')">✕</button>
+      </div>
+    </div>
+  `).join('');
+
+  await loadStatus();
+}
+
+// ── Download ──────────────────────────────────────────────────────
+async function downloadFile(fileId, name) {
+  log(`Downloading ${name}…`, 'info');
+  try {
+    const r = await fetch(`${API}/api/download/${fileId}`);
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    log(`✓ ${name} — blocks decrypted & assembled, SHA-256 verified`, 'ok');
+    toast(`Downloaded: ${name}`);
+  } catch(e) {
+    log(`✗ Download failed: ${e.message}`, 'err');
+    toast(e.message, false);
+  }
+}
+
+// ── Delete ────────────────────────────────────────────────────────
+async function deleteFile(fileId, name) {
+  if (!confirm(`Delete "${name}" and all its blocks?`)) return;
+  const r = await fetch(`${API}/api/files/${fileId}`, { method: 'DELETE' });
+  const d = await r.json();
+  if (d.success) {
+    log(`✓ Deleted ${name}`, 'ok');
+    toast(`Deleted: ${name}`);
+    loadFiles();
+  }
+}
+
+// ── Upload ────────────────────────────────────────────────────────
+let selectedFile = null;
+
+document.getElementById('file-input').addEventListener('change', function() {
+  selectedFile = this.files[0];
+  if (selectedFile) {
+    document.getElementById('upload-btn').disabled = false;
+    log(`Selected: ${selectedFile.name} (${fmt(selectedFile.size)})`, 'info');
+    animateBlockDiagram(selectedFile.size);
+  }
+});
+
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragging'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragging');
+  const f = e.dataTransfer.files[0];
+  if (f) {
+    selectedFile = f;
+    document.getElementById('upload-btn').disabled = false;
+    log(`Dropped: ${f.name} (${fmt(f.size)})`, 'info');
+    animateBlockDiagram(f.size);
+  }
+});
+
+document.getElementById('upload-btn').addEventListener('click', async () => {
+  if (!selectedFile) return;
+
+  const blockCount = Math.ceil(selectedFile.size / 65536) || 1;
+  const btn = document.getElementById('upload-btn');
+  btn.disabled = true;
+
+  const progWrap = document.getElementById('prog-wrap');
+  const progBar  = document.getElementById('prog-bar');
+  const progText = document.getElementById('prog-text');
+  const viz      = document.getElementById('block-viz');
+
+  progWrap.classList.add('show');
+  viz.innerHTML = Array.from({length: Math.min(blockCount, 80)}, (_, i) =>
+    `<div class="blk" id="blk-${i}"></div>`
+  ).join('') + (blockCount > 80 ? `<span style="font-family:var(--mono);font-size:.65rem;color:var(--muted);align-self:center">+${blockCount-80} more</span>` : '');
+
+  progText.textContent = `Splitting into ${blockCount} blocks…`;
+  progBar.style.width = '10%';
+
+  // Simulate block fill animation
+  const maxViz = Math.min(blockCount, 80);
+  for (let i = 0; i < maxViz; i++) {
+    setTimeout(() => {
+      const el = document.getElementById(`blk-${i}`);
+      if (el) el.className = 'blk filled';
+    }, (i / maxViz) * 600);
+  }
+
+  log(`Uploading ${selectedFile.name} → ${blockCount} blocks (AES-256-GCM)…`, 'info');
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+
+  try {
+    progBar.style.width = '40%';
+    const r = await fetch(`${API}/api/upload`, { method: 'POST', body: fd });
+    progBar.style.width = '90%';
+    const d = await r.json();
+
+    if (!d.success) throw new Error(d.error || 'Upload failed');
+
+    progBar.style.width = '100%';
+    for (let i = 0; i < maxViz; i++) {
+      const el = document.getElementById(`blk-${i}`);
+      if (el) el.className = 'blk done';
+    }
+
+    progText.textContent = `✓ Uploaded: ${d.blockCount} blocks encrypted · Checksum: ${d.checksum.slice(0,16)}…`;
+    log(`✓ ${selectedFile.name} → ${d.blockCount} blocks stored · SHA-256: ${d.checksum.slice(0,16)}…`, 'ok');
+    toast(`Uploaded: ${selectedFile.name}`);
+
+    selectedFile = null;
+    document.getElementById('file-input').value = '';
+    setTimeout(() => { progWrap.classList.remove('show'); loadFiles(); }, 2000);
+
+  } catch(e) {
+    progBar.style.background = 'var(--red)';
+    progText.textContent = '✗ ' + e.message;
+    log(`✗ Upload failed: ${e.message}`, 'err');
+    toast(e.message, false);
+    btn.disabled = false;
+  }
+});
+
+// ── Block canvas diagram ──────────────────────────────────────────
+function animateBlockDiagram(fileSize) {
+  const canvas = document.getElementById('block-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const BSIZE = 65536;
+  const count = Math.ceil(fileSize / BSIZE);
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#060a10';
+  ctx.fillRect(0, 0, W, H);
+
+  // File box
+  ctx.strokeStyle = '#00d4ff';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(10, 70, 90, 60);
+  ctx.fillStyle = 'rgba(0,212,255,.1)';
+  ctx.fillRect(10, 70, 90, 60);
+  ctx.fillStyle = '#e2eaf5';
+  ctx.font = '11px JetBrains Mono';
+  ctx.fillText('FILE', 35, 103);
+  ctx.fillStyle = '#6b7fa3';
+  ctx.font = '9px JetBrains Mono';
+  ctx.fillText(fmt(fileSize), 18, 118);
+
+  // Arrow
+  ctx.strokeStyle = '#00d4ff';
+  ctx.beginPath(); ctx.moveTo(102, 100); ctx.lineTo(125, 100); ctx.stroke();
+  ctx.fillStyle = '#00d4ff';
+  ctx.beginPath(); ctx.moveTo(125,95); ctx.lineTo(133,100); ctx.lineTo(125,105); ctx.fill();
+
+  // Splitter box
+  ctx.strokeStyle = '#7c3aed';
+  ctx.strokeRect(135, 75, 70, 50);
+  ctx.fillStyle = 'rgba(124,58,237,.1)';
+  ctx.fillRect(135, 75, 70, 50);
+  ctx.fillStyle = '#e2eaf5';
+  ctx.font = '10px JetBrains Mono';
+  ctx.fillText('SPLIT', 152, 97);
+  ctx.fillStyle = '#6b7fa3';
+  ctx.font = '8px JetBrains Mono';
+  ctx.fillText('64KB blocks', 141, 112);
+
+  // Blocks
+  const show = Math.min(count, 6);
+  const bx = 230, gap = 22;
+  for (let i = 0; i < show; i++) {
+    const y = 30 + i * gap;
+    // Arrow from splitter
+    ctx.strokeStyle = '#1d2d42';
+    ctx.beginPath(); ctx.moveTo(207, 100); ctx.lineTo(bx-8, y+10); ctx.stroke();
+    // Block box
+    ctx.strokeStyle = '#00f5a0';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx, y, 55, 20);
+    ctx.fillStyle = 'rgba(0,245,160,.07)';
+    ctx.fillRect(bx, y, 55, 20);
+    ctx.fillStyle = '#00f5a0';
+    ctx.font = '8px JetBrains Mono';
+    ctx.fillText(`BLK_${String(i).padStart(3,'0')}`, bx+4, y+13);
+    // Encrypted →
+    ctx.fillStyle = '#6b7fa3';
+    ctx.font = '7px JetBrains Mono';
+    ctx.fillText('🔒 AES', bx+60, y+13);
+  }
+  if (count > 6) {
+    ctx.fillStyle = '#6b7fa3'; ctx.font = '9px JetBrains Mono';
+    ctx.fillText(`+${count-6} more blocks`, bx, 175);
+  }
+}
+
+function drawDefaultDiagram() {
+  const canvas = document.getElementById('block-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.fillStyle = '#060a10'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = '#1d2d42';
+  ctx.font = '11px JetBrains Mono';
+  ctx.fillText('Select a file to preview block layout', 60, 105);
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+drawDefaultDiagram();
+loadStatus();
+loadFiles();
+setInterval(loadStatus, 30000);
+</script>
+</body>
+</html>

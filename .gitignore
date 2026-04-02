@@ -1,0 +1,5 @@
+saas-cloud/node_modules/
+saas-cloud/storage/blocks/
+saas-cloud/storage/metadata/
+.vscode/
+*.log
