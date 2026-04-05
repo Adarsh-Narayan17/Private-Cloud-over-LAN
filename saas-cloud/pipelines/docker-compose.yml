@@ -10,7 +10,7 @@ services:
   # ── Cloud Controller (main app) ──────────────
   cloud-controller:
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile
     image: saas-cloud:latest
     container_name: saas-cloud-controller

@@ -44,7 +44,12 @@ jobs:
       # Step 3: Install dependencies
       - name: 📦 Install Dependencies
         working-directory: ./saas-cloud
-        run: npm install
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       # Step 4: Run automated tests
       - name: 🧪 Run Tests
@@ -78,6 +83,7 @@ jobs:
 
       # Test the Docker image works
       - name: 🧪 Test Docker Container
+        working-directory: ./saas-cloud
         run: |
           # Start container
           docker run -d \
