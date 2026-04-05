@@ -1,0 +1,49 @@
+# ═══════════════════════════════════════════════
+#  Dockerfile — SaaS Cloud Controller
+#  Stage 1: Build | Stage 2: Production image
+# ═══════════════════════════════════════════════
+
+# ── Stage 1: Install dependencies ──────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files first (layer caching)
+COPY package*.json ./
+
+# Install only production dependencies
+RUN npm install --omit=dev
+
+# ── Stage 2: Production image ───────────────────
+FROM node:20-alpine AS production
+
+# Create non-root user for security
+RUN addgroup -S cloudgroup && adduser -S clouduser -G cloudgroup
+
+WORKDIR /app
+
+# Copy dependencies from builder
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy application source
+COPY server/        ./server/
+COPY client/        ./client/
+COPY cloud-cli.js   ./
+COPY package.json   ./
+
+# Create storage directories
+RUN mkdir -p storage/blocks storage/metadata && \
+    chown -R clouduser:cloudgroup /app
+
+# Switch to non-root user
+USER clouduser
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:3000/api/status || exit 1
+
+# Start server
+CMD ["node", "server/cloud_controller.js"]

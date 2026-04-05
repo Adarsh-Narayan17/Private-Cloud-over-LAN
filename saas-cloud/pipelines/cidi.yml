@@ -1,0 +1,46 @@
+name: SaaS Cloud CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    name: 🔨 Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # We point to the subfolder where package.json is
+          cache: 'npm'
+          cache-dependency-path: saas-cloud/package-lock.json
+
+      - name: 📦 Install Dependencies
+        working-directory: ./saas-cloud
+        run: npm install
+
+      - name: 🧪 Run Tests
+        working-directory: ./saas-cloud
+        run: node tests/cloud.test.js
+
+  docker-build:
+    name: 🐳 Build Docker Image
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐳 Build Docker Image
+        working-directory: ./saas-cloud
+        run: |
+          # Use the docker-compose file in your pipelines folder
+          docker compose -f pipelines/docker-compose.yml build --tag saas-cloud

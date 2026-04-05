@@ -1,0 +1,48 @@
+# ═══════════════════════════════════════════════
+#  docker-compose.yml — SaaS Cloud Stack
+#  Run with: docker-compose up -d
+# ═══════════════════════════════════════════════
+
+version: '3.8'
+
+services:
+
+  # ── Cloud Controller (main app) ──────────────
+  cloud-controller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: saas-cloud:latest
+    container_name: saas-cloud-controller
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - CLOUD_SECRET=${CLOUD_SECRET:-saas-cloud-lab-secret}
+      - NODE_ENV=production
+    volumes:
+      # Persist storage outside container
+      - cloud-blocks:/app/storage/blocks
+      - cloud-meta:/app/storage/metadata
+    restart: unless-stopped
+    networks:
+      - cloud-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ── Named volumes (persistent storage) ──────────
+volumes:
+  cloud-blocks:
+    name: saas_cloud_blocks
+  cloud-meta:
+    name: saas_cloud_metadata
+
+# ── Network ──────────────────────────────────────
+networks:
+  cloud-net:
+    driver: bridge
+    name: saas_cloud_network

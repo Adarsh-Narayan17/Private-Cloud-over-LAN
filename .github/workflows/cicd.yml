@@ -1,0 +1,139 @@
+# ═══════════════════════════════════════════════════════════════
+#  .github/workflows/cicd.yml
+#  GitHub Actions CI/CD Pipeline for SaaS Cloud Controller
+#
+#  Triggers on every push or pull request to main branch
+#  Pipeline: Build → Test → Docker Image → Deploy
+# ═══════════════════════════════════════════════════════════════
+
+name: SaaS Cloud CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+# ── Environment variables ────────────────────────────────────────
+env:
+  IMAGE_NAME: saas-cloud
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+
+  # ════════════════════════════════════════════════════════════════
+  #  JOB 1 — BUILD & TEST
+  # ════════════════════════════════════════════════════════════════
+  build-and-test:
+    name: 🔨 Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Node.js
+      - name: ⚙️ Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Step 3: Install dependencies
+      - name: 📦 Install Dependencies
+        run: npm install
+
+      # Step 4: Run automated tests
+      - name: 🧪 Run Tests
+        run: node tests/cloud.test.js
+
+      # Step 5: Show project structure
+      - name: 📁 Show Project Structure
+        run: |
+          echo "=== Project Files ==="
+          find . -not -path './node_modules*' -not -path './.git*' -type f | sort
+
+  # ════════════════════════════════════════════════════════════════
+  #  JOB 2 — BUILD DOCKER IMAGE
+  # ════════════════════════════════════════════════════════════════
+  docker-build:
+    name: 🐳 Build Docker Image
+    runs-on: ubuntu-latest
+    needs: build-and-test       # Only runs if tests pass
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      # Build Docker image
+      - name: 🐳 Build Docker Image
+        run: |
+          docker build -t $IMAGE_NAME:$IMAGE_TAG .
+          docker build -t $IMAGE_NAME:latest .
+
+      # Test the Docker image works
+      - name: 🧪 Test Docker Container
+        run: |
+          # Start container
+          docker run -d \
+            --name test-cloud \
+            -p 3000:3000 \
+            -e CLOUD_SECRET=ci-test-secret \
+            $IMAGE_NAME:latest
+
+          # Wait for it to be ready
+          sleep 5
+
+          # Hit the health endpoint
+          curl -f http://localhost:3000/api/status || exit 1
+
+          echo "✅ Docker container is healthy!"
+
+          # Stop container
+          docker stop test-cloud
+          docker rm test-cloud
+
+      # Save image as artifact (optional - for deployment)
+      - name: 💾 Save Docker Image
+        run: |
+          docker save $IMAGE_NAME:latest | gzip > saas-cloud-image.tar.gz
+          echo "Image size: $(du -sh saas-cloud-image.tar.gz)"
+
+      - name: 📤 Upload Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: saas-cloud-image.tar.gz
+          retention-days: 7
+
+  # ════════════════════════════════════════════════════════════════
+  #  JOB 3 — DEPLOY (to local VM / server via SSH)
+  #  Uncomment and configure this when you have a target server
+  # ════════════════════════════════════════════════════════════════
+  # deploy:
+  #   name: 🚀 Deploy to Server
+  #   runs-on: ubuntu-latest
+  #   needs: docker-build
+  #   if: github.ref == 'refs/heads/main'   # Only deploy from main
+  #
+  #   steps:
+  #     - name: 📥 Download Docker Image
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: docker-image
+  #
+  #     - name: 🚀 Deploy via SSH
+  #       uses: appleboy/ssh-action@v1.0.0
+  #       with:
+  #         host: ${{ secrets.SERVER_HOST }}       # e.g. 172.16.39.74
+  #         username: ${{ secrets.SERVER_USER }}   # e.g. ubuntu
+  #         key: ${{ secrets.SERVER_SSH_KEY }}
+  #         script: |
+  #           # Load new image
+  #           docker load < saas-cloud-image.tar.gz
+  #           # Restart with docker-compose
+  #           cd /opt/saas-cloud
+  #           docker-compose down
+  #           docker-compose up -d
+  #           echo "✅ Deployed successfully!"
