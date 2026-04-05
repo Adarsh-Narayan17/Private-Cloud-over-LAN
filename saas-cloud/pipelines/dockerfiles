@@ -1,49 +1,18 @@
-# ═══════════════════════════════════════════════
-#  Dockerfile — SaaS Cloud Controller
-#  Stage 1: Build | Stage 2: Production image
-# ═══════════════════════════════════════════════
+# ── Use Node.js 20 ───────────────────────────────────────────
+FROM node:20-slim AS base
 
-# ── Stage 1: Install dependencies ──────────────
-FROM node:20-alpine AS builder
-
+# ── Set working directory ────────────────────────────────────
 WORKDIR /app
 
-# Copy package files first (layer caching)
+# ── Install dependencies ─────────────────────────────────────
 COPY package*.json ./
+RUN npm install
 
-# Install only production dependencies
-RUN npm install --omit=dev
+# ── Copy source code ─────────────────────────────────────────
+COPY . .
 
-# ── Stage 2: Production image ───────────────────
-FROM node:20-alpine AS production
-
-# Create non-root user for security
-RUN addgroup -S cloudgroup && adduser -S clouduser -G cloudgroup
-
-WORKDIR /app
-
-# Copy dependencies from builder
-COPY --from=builder /app/node_modules ./node_modules
-
-# Copy application source
-COPY server/        ./server/
-COPY client/        ./client/
-COPY cloud-cli.js   ./
-COPY package.json   ./
-
-# Create storage directories
-RUN mkdir -p storage/blocks storage/metadata && \
-    chown -R clouduser:cloudgroup /app
-
-# Switch to non-root user
-USER clouduser
-
-# Expose port
+# ── Expose port 3000 ─────────────────────────────────────────
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget -qO- http://localhost:3000/api/status || exit 1
-
-# Start server
+# ── Start the app ────────────────────────────────────────────
 CMD ["node", "server/cloud_controller.js"]
