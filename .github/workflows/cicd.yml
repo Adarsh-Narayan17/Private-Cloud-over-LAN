@@ -18,6 +18,7 @@ on:
 env:
   IMAGE_NAME: saas-cloud
   IMAGE_TAG: ${{ github.sha }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Fixes the Node 20 deprecation warnings
 
 jobs:
 
@@ -78,8 +79,8 @@ jobs:
       - name: 🐳 Build Docker Image
         working-directory: ./saas-cloud
         run: |
-          docker build -t $IMAGE_NAME:$IMAGE_TAG .
-          docker build -t $IMAGE_NAME:latest .
+          docker build -f pipelines/dockerfiles -t $IMAGE_NAME:$IMAGE_TAG .
+          docker build -f pipelines/dockerfiles -t $IMAGE_NAME:latest .
 
       # Test the Docker image works
       - name: 🧪 Test Docker Container
