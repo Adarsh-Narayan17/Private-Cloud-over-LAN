@@ -1,18 +1,5 @@
 #!/usr/bin/env node
-/**
- * ═══════════════════════════════════════════════════════════════
- *  cloud-cli.js  —  Command-line client for SaaS Cloud Controller
- *  Usage: node cloud-cli.js <command> [args]
- * ═══════════════════════════════════════════════════════════════
- *
- *  Commands:
- *    status              Show cloud node status
- *    list                List all uploaded files
- *    upload <filepath>   Upload a file to the cloud
- *    download <fileId>   Download file by ID
- *    info <fileId>       Show block metadata for a file
- *    delete <fileId>     Delete file and all its blocks
- */
+
 
 const http = require('http');
 const fs   = require('fs');
