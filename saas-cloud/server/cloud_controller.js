@@ -4,7 +4,6 @@ const crypto     = require('crypto');
 const fs         = require('fs');
 const path       = require('path');
 const cors       = require('cors');
-
 const app  = express();
 const PORT = process.env.PORT || 3000;
 const BLOCK_DIR    = path.join(__dirname, '../storage/blocks');
@@ -13,17 +12,12 @@ const BLOCK_SIZE   = 64 * 1024; // 64 KB per block (like HDFS default, scaled do
 const REPLICATION  = 1;         
 
 [BLOCK_DIR, META_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
-
-// ── Middleware ───────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client/public')));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
-// ══════════════════════════════════════════════════════════════════
-//  CRYPTO HELPERS  — AES-256-GCM authenticated encryption
-// ══════════════════════════════════════════════════════════════════
 
 const MASTER_KEY = crypto.scryptSync(
   process.env.CLOUD_SECRET || 'saas-cloud-lab-secret-2024',
@@ -36,7 +30,6 @@ function encryptBlock(data) {
   const cipher     = crypto.createCipheriv('aes-256-gcm', MASTER_KEY, iv);
   const encrypted  = Buffer.concat([cipher.update(data), cipher.final()]);
   const authTag    = cipher.getAuthTag();
-  // Layout: [12B iv][16B authTag][...ciphertext]
   return Buffer.concat([iv, authTag, encrypted]);
 }
 
@@ -48,10 +41,6 @@ function decryptBlock(blob) {
   decipher.setAuthTag(authTag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }
-
-// ══════════════════════════════════════════════════════════════════
-//  BLOCK ENGINE  — Split / store / retrieve
-// ══════════════════════════════════════════════════════════════════
 
 function splitIntoBlocks(buffer) {
   const blocks = [];
@@ -151,8 +140,6 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   console.log(`[UPLOAD] ${req.file.originalname} → ${rawBlocks.length} blocks, id=${fileId}`);
   res.json({ success: true, fileId, blockCount: rawBlocks.length, checksum });
 });
-
-// ── GET /api/download/:fileId ────────────────────────────────────
 app.get('/api/download/:fileId', (req, res) => {
   const meta = loadMetadata(req.params.fileId);
   if (!meta) return res.status(404).json({ error: 'File not found' });
@@ -160,8 +147,6 @@ app.get('/api/download/:fileId', (req, res) => {
   try {
     const parts = meta.blocks.map(b => loadBlock(b.blockId));
     const assembled = Buffer.concat(parts);
-
-    // Verify integrity
     const checksum = crypto.createHash('sha256').update(assembled).digest('hex');
     if (checksum !== meta.checksum) {
       return res.status(500).json({ error: 'Checksum mismatch — data integrity violated' });
@@ -179,15 +164,12 @@ app.get('/api/download/:fileId', (req, res) => {
     res.status(500).json({ error: 'Decryption or reassembly failed', detail: err.message });
   }
 });
-
-// ── GET /api/files/:fileId ───────────────────────────────────────
 app.get('/api/files/:fileId', (req, res) => {
   const meta = loadMetadata(req.params.fileId);
   if (!meta) return res.status(404).json({ error: 'File not found' });
   res.json(meta);
 });
 
-// ── DELETE /api/files/:fileId ────────────────────────────────────
 app.delete('/api/files/:fileId', (req, res) => {
   const meta = loadMetadata(req.params.fileId);
   if (!meta) return res.status(404).json({ error: 'File not found' });
@@ -201,8 +183,6 @@ app.delete('/api/files/:fileId', (req, res) => {
   console.log(`[DELETE] ${meta.originalName} — ${meta.blockCount} blocks removed`);
   res.json({ success: true, deleted: meta.originalName });
 });
-
-// ── Start ────────────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('╔══════════════════════════════════════════════════════╗');
